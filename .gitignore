@@ -1,0 +1,9 @@
+backup_/
+index_backup*
+index_backup*.html
+.DS_Store
+desktop.ini
+Thumbs.db
+.vscode/
+.idea/
+node_modules/
