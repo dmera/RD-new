@@ -36,9 +36,17 @@
 
 	const updateToggleUI = (mode) => {
 		const toggles = document.querySelectorAll('.theme-toggle');
+		const isMobileTablet = window.matchMedia('(max-width: 879.98px)').matches;
 		toggles.forEach(btn => {
 			btn.setAttribute('data-mode', mode);
-			const iconClass = mode === 'dark' ? 'pi pi-moon' : (mode === 'light' ? 'pi pi-sun' : 'pi pi-desktop');
+			let iconClass;
+			if (mode === 'dark') {
+				iconClass = 'pi pi-moon';
+			} else if (mode === 'light') {
+				iconClass = 'pi pi-sun';
+			} else {
+				iconClass = isMobileTablet ? 'pi pi-mobile' : 'pi pi-desktop';
+			}
 			btn.innerHTML = `<span class="theme-toggle-label">theme</span><i class="${iconClass}" aria-hidden="true"></i>`;
 			const tooltip = mode === 'dark' ? 'Dark mode' : (mode === 'light' ? 'Light mode' : 'Same as system');
 			btn.removeAttribute('title');
@@ -48,7 +56,12 @@
 	};
 
 	const initTheme = () => {
-		const saved = localStorage.getItem('theme') || 'system';
+		let saved = localStorage.getItem('theme');
+		// Ensure default is 'system' if not set or invalid
+		if (!saved || !['system', 'light', 'dark'].includes(saved)) {
+			saved = 'system';
+			localStorage.setItem('theme', 'system');
+		}
 		applyTheme(saved);
 		updateToggleUI(saved);
 		// React to system changes when in system mode
@@ -71,6 +84,7 @@
 
 	const bindThemeToggle = () => {
 		const toggles = document.querySelectorAll('.theme-toggle');
+		const desktopMq = window.matchMedia('(min-width: 880px)');
 		toggles.forEach(btn => {
 			btn.addEventListener('click', () => {
 				const current = localStorage.getItem('theme') || 'system';
@@ -79,30 +93,33 @@
 				applyTheme(next);
 				updateToggleUI(next);
 
-				// Click animation: dip to 1.00 then back up
-				try {
-					const isHover = btn.matches(':hover');
-					const keyframes = isHover
-						? [
-							{ transform: 'scale(1.05)' },
-							{ transform: 'scale(1.00)' },
-							{ transform: 'scale(1.05)' }
-						]
-						: [
-							{ transform: 'scale(1.00)' },
-							{ transform: 'scale(0.99)' },
-							{ transform: 'scale(1.00)' }
-						];
-					btn.animate(keyframes, { duration: 180, easing: 'ease-out' });
-				} catch (e) {
-					// no-op if animations are unsupported
+				// Click animation (desktop only)
+				if (desktopMq.matches) {
+					try {
+						const isHover = btn.matches(':hover');
+						const keyframes = isHover
+							? [
+								{ transform: 'scale(1.05)' },
+								{ transform: 'scale(1.00)' },
+								{ transform: 'scale(1.05)' }
+							]
+							: [
+								{ transform: 'scale(1.00)' },
+								{ transform: 'scale(0.99)' },
+								{ transform: 'scale(1.00)' }
+							];
+						btn.animate(keyframes, { duration: 180, easing: 'ease-out' });
+					} catch (e) {
+						// no-op if animations are unsupported
+					}
 				}
 			});
 
-			// Custom tooltip with delay; fixed position above the toggle
+			// Tooltip (desktop only - checked dynamically)
 			let tooltipEl = null;
 			let tooltipTimeout = null;
 			const createAndPositionTooltip = () => {
+				if (!desktopMq.matches) return; // Only on desktop
 				const mode = btn.getAttribute('data-mode') || 'system';
 				const text = mode === 'dark' ? 'Dark mode' : (mode === 'light' ? 'Light mode' : 'Same as system');
 				if (!tooltipEl) {
@@ -111,10 +128,9 @@
 					document.body.appendChild(tooltipEl);
 				}
 				tooltipEl.textContent = text;
-				// Position centered above the button
 				const rect = btn.getBoundingClientRect();
 				const centerX = rect.left + (rect.width / 2);
-				const topY = rect.top - 10; // 10px gap above
+				const topY = rect.top - 10;
 				tooltipEl.style.left = centerX + 'px';
 				tooltipEl.style.top = topY + 'px';
 				tooltipEl.style.transform = 'translate(-50%, -100%)';
@@ -122,11 +138,13 @@
 			};
 
 			const scheduleTooltip = () => {
+				if (!desktopMq.matches) return; // Only on desktop
 				clearTimeout(tooltipTimeout);
-				tooltipTimeout = setTimeout(createAndPositionTooltip, 150); // show after shorter delay
+				tooltipTimeout = setTimeout(createAndPositionTooltip, 150);
 			};
 
 			const hideTooltip = () => {
+				if (!desktopMq.matches) return; // Only on desktop
 				clearTimeout(tooltipTimeout);
 				if (tooltipEl) {
 					tooltipEl.style.opacity = '0';
@@ -140,6 +158,13 @@
 
 	initTheme();
 	bindThemeToggle();
+	
+	// Update icon when viewport size changes (mobile ↔ desktop)
+	const resizeMq = window.matchMedia('(max-width: 879.98px)');
+	resizeMq.addEventListener('change', () => {
+		const current = localStorage.getItem('theme') || 'system';
+		updateToggleUI(current);
+	});
 	const navToggleButton = document.querySelector('.nav-toggle');
 	const navElement = document.getElementById('site-nav');
 	if (navToggleButton && navElement) {
@@ -149,12 +174,32 @@
 			navElement.classList.toggle('open');
 		});
 	}
+	// Function to close mobile menu
+	const closeMobileMenu = () => {
+		if (navElement && navElement.classList.contains('open')) {
+			navElement.classList.remove('open');
+			navToggleButton?.setAttribute('aria-expanded', 'false');
+		}
+	};
+
 	// Close mobile nav on link click
 	navElement?.addEventListener('click', (e) => {
 		const target = e.target;
 		if (target instanceof HTMLElement && target.tagName.toLowerCase() === 'a') {
-			navElement.classList.remove('open');
-			navToggleButton?.setAttribute('aria-expanded', 'false');
+			closeMobileMenu();
+		}
+	});
+
+	// Close mobile menu on scroll
+	window.addEventListener('scroll', () => {
+		closeMobileMenu();
+	});
+
+	// Close mobile menu when clicking outside
+	document.addEventListener('click', (e) => {
+		const isClickInsideNav = navElement && (navElement.contains(e.target) || navToggleButton?.contains(e.target));
+		if (!isClickInsideNav && navElement?.classList.contains('open')) {
+			closeMobileMenu();
 		}
 	});
 
@@ -271,16 +316,24 @@
 	cards.forEach(card => {
 		const img = card.querySelector('.card-media img');
 		if (img) {
-			const originalSrc = img.src;
 			const dataHover = img.getAttribute('data-hover-src');
-			const hoverSrc = dataHover || originalSrc.replace('.png', '-hover.png').replace('.jpg', '-hover.jpg').replace('.svg', '-hover.svg');
+			const dataLight = img.getAttribute('data-light-src');
+			const dataDark = img.getAttribute('data-dark-src');
+			
+			const getOriginalSrc = () => {
+				const currentMode = localStorage.getItem('theme') || 'system';
+				const isDark = currentMode === 'dark' || (currentMode === 'system' && getSystemTheme() === 'dark');
+				return (isDark && dataDark) ? dataDark : (dataLight || img.src);
+			};
+			
+			const hoverSrc = dataHover || img.src.replace('.png', '-hover.png').replace('.jpg', '-hover.jpg').replace('.svg', '-hover.svg');
 			
 			card.addEventListener('mouseenter', () => {
 				img.src = hoverSrc;
 			});
 			
 			card.addEventListener('mouseleave', () => {
-				img.src = originalSrc;
+				img.src = getOriginalSrc();
 			});
 		}
 	});
